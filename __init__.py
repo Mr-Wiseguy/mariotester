@@ -170,10 +170,10 @@ class MarioTester(bpy.types.Operator):
 
         cur_time = time.perf_counter()
 
-        if (cur_time - self.start_time) > (self.last_frame * 0.033333):
-            self.last_frame += 1
 
-            if event.type == 'TIMER':
+        if event.type in {'MOUSEMOVE','TIMER'}:
+            if (cur_time - self.start_time) > (self.last_frame * 0.033333):
+                self.last_frame += 1
                 while len(events) > 0 :
                     for event in events[0]:
                         if event.code == "ABS_X":
@@ -221,11 +221,6 @@ class MarioTester(bpy.types.Operator):
                     self.mario_obj.pose.bones[bone_name].rotation_euler[0] = math.radians(anim_data.bone_rotations[bone_index][0])
                     self.mario_obj.pose.bones[bone_name].rotation_euler[1] = math.radians(anim_data.bone_rotations[bone_index][1])
                     self.mario_obj.pose.bones[bone_name].rotation_euler[2] = math.radians(anim_data.bone_rotations[bone_index][2])
-                # for bone_index in range(1):
-                #     bone_name = bone_names[bone_index]
-                #     self.mario_obj.pose.bones[bone_name].rotation_euler[0] = math.radians(anim_data.bone_rotations[bone_index][0])
-                #     self.mario_obj.pose.bones[bone_name].rotation_euler[1] = math.radians(anim_data.bone_rotations[bone_index][1])
-                #     self.mario_obj.pose.bones[bone_name].rotation_euler[2] = math.radians(anim_data.bone_rotations[bone_index][2])
 
                 self.mario_obj.location.x = pos[0] / 100.0
                 self.mario_obj.location.y = -pos[2] / 100.0
