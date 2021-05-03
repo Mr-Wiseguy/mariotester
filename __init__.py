@@ -50,6 +50,9 @@ libmario.getMarioVelocity.artypes = [Vec3f]
 libmario.getMarioRotation.restype = None
 libmario.getMarioRotation.artypes = [Vec3f]
 
+libmario.getMarioTorsoRotation.restype = None
+libmario.getMarioTorsoRotation.artypes = [Vec3f]
+
 libmario.getMarioAnimFrame.restype = c_int32
 libmario.getMarioAnimFrame.artypes = []
 
@@ -150,6 +153,12 @@ class MarioTester(bpy.types.Operator):
         
         libmario.init()
 
+        mario_pos = Vec3f(self.mario_obj.location.x * 100, self.mario_obj.location.z * 100, -self.mario_obj.location.y * 100)
+        mario_rot = Vec3f(math.degrees(self.mario_obj.rotation_euler[0]), math.degrees(self.mario_obj.rotation_euler[1]), math.degrees(self.mario_obj.rotation_euler[2]))
+
+        libmario.setMarioPosition(mario_pos)
+        libmario.setMarioRotation(mario_rot)
+
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.033333, window=context.window)
         wm.modal_handler_add(self)
@@ -207,11 +216,23 @@ class MarioTester(bpy.types.Operator):
                 pos = Vec3f()
                 vel = Vec3f()
                 rot = Vec3f()
+                torso_rot = Vec3f()
                 libmario.getMarioPosition(pos)
                 libmario.getMarioVelocity(vel)
                 libmario.getMarioRotation(rot)
+                libmario.getMarioTorsoRotation(torso_rot)
                 anim_data = AnimData()
                 libmario.getMarioAnimData(byref(anim_data))
+
+                try:
+                    pose = self.mario_obj.pose
+                except ReferenceError:
+                    self.mario_obj = bpy.data.objects['mario_geo']
+                    pose = self.mario_obj.pose
+
+                self.mario_obj.pose.bones['002-rotate'].rotation_euler[0] = math.radians(torso_rot[0])
+                self.mario_obj.pose.bones['002-rotate'].rotation_euler[1] = math.radians(torso_rot[1])
+                self.mario_obj.pose.bones['002-rotate'].rotation_euler[2] = math.radians(torso_rot[2])
 
                 self.mario_obj.pose.bones[bone_names[0]].location[0] = float(anim_data.root_translation[0]) / 189.0
                 self.mario_obj.pose.bones[bone_names[0]].location[1] = float(anim_data.root_translation[1]) / 189.0
