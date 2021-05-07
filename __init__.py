@@ -56,7 +56,7 @@ class Surface(Structure):
     
 FindFloorHandlerType = CFUNCTYPE(c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_int32))
 FindCeilHandlerType = CFUNCTYPE(c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_int32))
-FindWallsHandlerType = CFUNCTYPE(c_float, c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_int32))
+FindWallsHandlerType = CFUNCTYPE(c_int32, c_float, c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_float))
 
 libmario.init.restype = None
 libmario.init.artypes = [FindFloorHandlerType, FindCeilHandlerType, FindWallsHandlerType]
@@ -114,6 +114,10 @@ U_CBUTTONS   = CONT_E
 L_CBUTTONS   = CONT_C
 R_CBUTTONS   = CONT_F
 D_CBUTTONS   = CONT_D
+
+SURFACE_FLAG_DYNAMIC          = (1 << 0)
+SURFACE_FLAG_NO_CAM_COLLISION = (1 << 1)
+SURFACE_FLAG_X_PROJECTION     = (1 << 3)
 
 events = []
 _t = None
@@ -192,8 +196,6 @@ class MarioTester(bpy.types.Operator):
                     hit_mats = mats
                     hit_height = cur_pos.z
                     hit_norm = cur_norm
-            
-            print('hit_norm: ' + str(hit_norm))
 
             if hit_bvh:
                 found_out[0] = 1
@@ -216,6 +218,7 @@ class MarioTester(bpy.types.Operator):
                 surface_out[0].origin_offset = hit_height * 100
 
                 surface_out[0].type = 0x0000
+                surface_out[0].flags = SURFACE_FLAG_DYNAMIC
 
             else:
                 found_out[0] = 0
@@ -245,8 +248,6 @@ class MarioTester(bpy.types.Operator):
                     hit_mats = mats
                     hit_height = cur_pos.z
                     hit_norm = cur_norm
-            
-            print('hit_norm: ' + str(hit_norm))
 
             if hit_bvh:
                 found_out[0] = 1
@@ -269,6 +270,7 @@ class MarioTester(bpy.types.Operator):
                 surface_out[0].origin_offset = hit_height * 100
 
                 surface_out[0].type = 0x0000
+                surface_out[0].flags = SURFACE_FLAG_DYNAMIC
 
             else:
                 found_out[0] = 0
@@ -277,6 +279,95 @@ class MarioTester(bpy.types.Operator):
 
         # Return closure
         return find_ceil
+        
+    # Creatures a closure that allows the function to access the MarioTester instance
+    def create_find_wall_collisions_handler(self):
+
+        def find_wall_collisions(x, y, z, offsetY, radius, surfaces_out, pos_out):
+            if radius > 200.0: radius = 200.0
+            real_radius = radius / 100.0
+
+            pos_x_ray_dir = mathutils.Vector(( 1,  0, 0))
+            pos_x_ray_origin = mathutils.Vector((x / 100.0 - real_radius, -z / 100.0, (y + offsetY) / 100.0))
+
+            neg_x_ray_dir = mathutils.Vector((-1,  0, 0))
+            neg_x_ray_origin = mathutils.Vector((x / 100.0 + real_radius, -z / 100.0, (y + offsetY) / 100.0))
+            
+            pos_z_ray_dir = mathutils.Vector(( 0, -1, 0)) # Named based on sm64 coordinate system
+            pos_z_ray_origin = mathutils.Vector((x / 100.0, -z / 100.0 + real_radius, (y + offsetY) / 100.0))
+            
+            neg_z_ray_dir = mathutils.Vector(( 0,  1, 0))
+            neg_z_ray_origin = mathutils.Vector((x / 100.0, -z / 100.0 - real_radius, (y + offsetY) / 100.0))
+
+            pos = mathutils.Vector((x, y, z))
+
+            num_hits = 0
+
+            # print('ray start: ' + str(pos_x_ray_origin))
+            # print('ray dir: ' + str(pos_x_ray_dir))
+
+            # raycast positive ray direction against negative normal direction
+            for bvh, (normals, mats) in self.wall_neg_x_bvh_trees.items():
+                cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(pos_x_ray_origin, pos_x_ray_dir, real_radius * 2)
+                if cur_pos:
+                    if num_hits < 4:
+                        surfaces_out[num_hits].normal[0] = cur_norm[0]
+                        surfaces_out[num_hits].normal[1] = cur_norm[2]
+                        surfaces_out[num_hits].normal[2] = -cur_norm[1]
+                        pos += mathutils.Vector((cur_dist * 100.0 - (radius * 2), 0, 0))
+                        surfaces_out[num_hits].type = 0x0000
+                        surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
+                    num_hits += 1
+            
+            # raycast negative ray direction against positive normal direction
+            for bvh, (normals, mats) in self.wall_pos_x_bvh_trees.items():
+                cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(neg_x_ray_origin, neg_x_ray_dir, real_radius * 2)
+                if cur_pos:
+                    if num_hits < 4:
+                        surfaces_out[num_hits].normal[0] = cur_norm[0]
+                        surfaces_out[num_hits].normal[1] = cur_norm[2]
+                        surfaces_out[num_hits].normal[2] = -cur_norm[1]
+                        pos -= mathutils.Vector((cur_dist * 100.0 - (radius * 2), 0, 0))
+                        surfaces_out[num_hits].type = 0x0000
+                        surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
+                    num_hits += 1
+                  
+            # raycast positive ray direction against negative normal direction  
+            for bvh, (normals, mats) in self.wall_neg_z_bvh_trees.items():
+                cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(pos_z_ray_origin, pos_z_ray_dir, real_radius * 2)
+                if cur_pos:
+                    if num_hits < 4:
+                        surfaces_out[num_hits].normal[0] = cur_norm[0]
+                        surfaces_out[num_hits].normal[1] = cur_norm[2]
+                        surfaces_out[num_hits].normal[2] = -cur_norm[1]
+                        pos += mathutils.Vector((0, 0, cur_dist * 100.0 - (radius * 2)))
+                        surfaces_out[num_hits].type = 0x0000
+                        surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
+                    num_hits += 1
+            
+            # raycast negative ray direction against positive normal direction
+            for bvh, (normals, mats) in self.wall_pos_z_bvh_trees.items():
+                cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(neg_z_ray_origin, neg_z_ray_dir, real_radius * 2)
+                if cur_pos:
+                    if num_hits < 4:
+                        surfaces_out[num_hits].normal[0] = cur_norm[0]
+                        surfaces_out[num_hits].normal[1] = cur_norm[2]
+                        surfaces_out[num_hits].normal[2] = -cur_norm[1]
+                        pos -= mathutils.Vector((0, 0, cur_dist * 100.0 - (radius * 2)))
+                        surfaces_out[num_hits].type = 0x0000
+                        surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
+                    num_hits += 1
+            
+            # print('num_hits: ' + str(num_hits))
+
+            pos_out[0] = pos[0]
+            pos_out[1] = pos[1]
+            pos_out[2] = pos[2]
+            
+            return num_hits
+
+        # Return closure
+        return find_wall_collisions
 
     def process_updates(self, context):
         scene_obj_set = set(context.scene.objects.values())
@@ -285,12 +376,16 @@ class MarioTester(bpy.types.Operator):
 
         self.floor_bvh_trees = dict()
         self.ceil_bvh_trees = dict()
+        self.wall_pos_x_bvh_trees = dict()
+        self.wall_neg_x_bvh_trees = dict()
+        self.wall_pos_z_bvh_trees = dict()
+        self.wall_neg_z_bvh_trees = dict()
 
         for obj in collision_objs:
             mesh = obj.data
             if mesh.name_full == 'skinned.001': # todo not this
                 continue
-            print(mesh.name_full)
+            # print(mesh.name_full)
             materials = list(mesh.materials)
             if not any(mat.is_f3d for mat in materials): # mesh has no f3d materials
                 continue
@@ -303,67 +398,48 @@ class MarioTester(bpy.types.Operator):
             
             cur_floor_bmesh = cur_bmesh.copy()
             cur_ceil_bmesh = cur_bmesh.copy()
-            walls_x_bmesh = cur_bmesh.copy()
-            walls_z_bmesh = cur_bmesh.copy() # z in sm64 coordinate space, -y in blender coordinate space
+            cur_walls_pos_x_bmesh = cur_bmesh.copy()
+            cur_walls_neg_x_bmesh = cur_bmesh.copy()
+            cur_walls_pos_z_bmesh = cur_bmesh.copy() # z in sm64 coordinate space, -y in blender coordinate space
+            cur_walls_neg_z_bmesh = cur_bmesh.copy()
 
             not_floor_faces = [face for face in cur_floor_bmesh.faces if not (face.normal.z > 0.01)]
             not_ceil_faces = [face for face in cur_ceil_bmesh.faces if not (face.normal.z < -0.01)]
+            not_pos_x_walls_faces = [face for face in cur_walls_pos_x_bmesh.faces if (face.normal.z < -0.01 or face.normal.z > 0.01 or face.normal.x <=  0.707)]
+            not_neg_x_walls_faces = [face for face in cur_walls_neg_x_bmesh.faces if (face.normal.z < -0.01 or face.normal.z > 0.01 or face.normal.x >= -0.707)]
+            # [face for face in cur_walls_x_bmesh.faces if (face.normal.z < -0.01 or face.normal.z > 0.01 or not (face.normal.x >= -0.707 and face.normal.x <= 0.707))]
+            not_pos_z_walls_faces = [face for face in cur_walls_pos_z_bmesh.faces if (face.normal.z < -0.01 or face.normal.z > 0.01 or face.normal.x < -0.707 or face.normal.x > 0.707 or face.normal.y >= 0)]
+            not_neg_z_walls_faces = [face for face in cur_walls_neg_z_bmesh.faces if (face.normal.z < -0.01 or face.normal.z > 0.01 or face.normal.x < -0.707 or face.normal.x > 0.707 or face.normal.y  < 0)]
 
             # delete floors/ceils/walls from corresponding bmeshes
             bmesh.ops.delete(cur_floor_bmesh, geom=not_floor_faces, context='FACES_ONLY')
             bmesh.ops.delete(cur_ceil_bmesh, geom=not_ceil_faces, context='FACES_ONLY')
+            bmesh.ops.delete(cur_walls_pos_x_bmesh, geom=not_pos_x_walls_faces, context='FACES_ONLY')
+            bmesh.ops.delete(cur_walls_neg_x_bmesh, geom=not_neg_x_walls_faces, context='FACES_ONLY')
+            bmesh.ops.delete(cur_walls_pos_z_bmesh, geom=not_pos_z_walls_faces, context='FACES_ONLY')
+            bmesh.ops.delete(cur_walls_neg_z_bmesh, geom=not_neg_z_walls_faces, context='FACES_ONLY')
 
             cur_bmesh.free()
+            cur_walls_pos_x_bmesh.normal_update()
+            cur_walls_neg_x_bmesh.normal_update()
             self.floor_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_floor_bmesh)] = ([face.normal for face in cur_floor_bmesh.faces], materials)
             self.ceil_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_ceil_bmesh)] = ([face.normal for face in cur_ceil_bmesh.faces], materials)
+            self.wall_pos_x_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_pos_x_bmesh)] = ([face.normal for face in cur_walls_pos_x_bmesh.faces], materials)
+            self.wall_neg_x_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_neg_x_bmesh)] = ([face.normal for face in cur_walls_neg_x_bmesh.faces], materials)
+            self.wall_pos_z_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_pos_z_bmesh)] = ([face.normal for face in cur_walls_pos_z_bmesh.faces], materials)
+            self.wall_neg_z_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_neg_z_bmesh)] = ([face.normal for face in cur_walls_neg_z_bmesh.faces], materials)
+
+            # print('pos x faces: ' + str(len(cur_walls_pos_x_bmesh.faces)))
+            # print('neg x faces: ' + str(len(cur_walls_neg_x_bmesh.faces)))
+            # print('pos z faces: ' + str(len(cur_walls_pos_z_bmesh.faces)))
+            # print('neg z faces: ' + str(len(cur_walls_neg_z_bmesh.faces)))
             
             cur_floor_bmesh.free()
             cur_ceil_bmesh.free()
-            walls_x_bmesh.free()
-            walls_z_bmesh.free()
-
-        # print(self.bvh_trees)
-
-        # collision_meshes = [obj.data for obj in scene_obj_set if (obj.type == 'MESH' and obj.visible_get() and not obj.ignore_collision)]
-
-        # collision_polygons = dict()
-
-        # for mesh in collision_meshes:
-        #     if mesh.name_full == 'skinned.001': # todo not this
-        #         continue
-        #     print(mesh.name_full)
-        #     materials = list(mesh.materials)
-        #     if len(materials) == 0: # mesh has no materials
-        #         continue
-        #     # print('materials: ' + str(materials))
-        #     polygon_material_dict = dict()
-
-        #     for material_index, polygons in itertools.groupby(mesh.polygons, lambda x: x.material_index):
-        #         material = materials[material_index]
-        #         # print(material)
-        #         if not material.is_f3d:
-        #             continue
-        #         polygons = list(polygons)
-        #         print('material_index: '+ str(material_index))
-        #         print('polygons: ' + str(polygons))
-        #         surface_type = material.collision_type
-        #         if not surface_type in collision_polygons:
-        #             collision_polygons[surface_type] = polygons
-        #         else:
-        #             collision_polygons[surface_type].extend(polygons)
-        
-        # print(collision_polygons)
-
-        # self.bvh_trees = dict()
-
-        # for surface_type, polygons in collision_polygons:
-        #     bvh_trees[surface_type] = B
-
-        # self.depsgraph = bpy.context.evaluated_depsgraph_get()
-        # self.collision_data = filter(lambda cur_data: cur_data.obj in scene_obj_set, self.collision_data)
-        
-        # for update in self.depsgraph.updates:
-        #     print(update.id)
+            cur_walls_pos_x_bmesh.free()
+            cur_walls_neg_x_bmesh.free()
+            cur_walls_pos_z_bmesh.free()
+            cur_walls_neg_z_bmesh.free()
 
     def execute(self, context):
         global _t
@@ -376,13 +452,14 @@ class MarioTester(bpy.types.Operator):
         self.start_time = time.perf_counter()
         self.find_floor_handler = FindFloorHandlerType(self.create_find_floor_handler())
         self.find_ceil_handler = FindFloorHandlerType(self.create_find_ceil_handler())
+        self.find_wall_collisions_handler = FindWallsHandlerType(self.create_find_wall_collisions_handler())
         
         if not _t :
             _t = threading.Thread(target=worker)
             _t.daemon = True
             _t.start()
         
-        libmario.init(self.find_floor_handler, self.find_ceil_handler, None)
+        libmario.init(self.find_floor_handler, self.find_ceil_handler, self.find_wall_collisions_handler)
 
         mario_pos = Vec3f(self.mario_obj.location.x * 100, self.mario_obj.location.z * 100, -self.mario_obj.location.y * 100)
         mario_rot = Vec3f(math.degrees(self.mario_obj.rotation_euler[0]), math.degrees(self.mario_obj.rotation_euler[1]), math.degrees(self.mario_obj.rotation_euler[2]))
