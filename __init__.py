@@ -224,6 +224,59 @@ class MarioTester(bpy.types.Operator):
 
         # Return closure
         return find_floor
+        
+    # Creatures a closure that allows the function to access the MarioTester instance
+    def create_find_ceil_handler(self):
+
+        def find_ceil(x, y, z, surface_out, found_out):
+            ray_origin = mathutils.Vector((x / 100.0, -z / 100.0, y / 100.0 - 0.78))
+            ray_dir = mathutils.Vector((0, 0, 1))
+            hit_mats = None
+            hit_bvh = None
+            hit_dist = sys.float_info.max
+            hit_height = 20000.0 / 100.0
+            hit_norm = mathutils.Vector((0.0, 0.0, -1.0))
+
+            for bvh, (normals, mats) in self.ceil_bvh_trees.items():
+                cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(ray_origin, ray_dir)
+                if cur_pos and cur_dist < hit_dist:
+                    hit_dist = cur_dist
+                    hit_bvh = bvh
+                    hit_mats = mats
+                    hit_height = cur_pos.z
+                    hit_norm = cur_norm
+            
+            print('hit_norm: ' + str(hit_norm))
+
+            if hit_bvh:
+                found_out[0] = 1
+                surface_out[0].vertex1[0] = -100
+                surface_out[0].vertex1[1] = 0
+                surface_out[0].vertex1[2] = -100
+
+                surface_out[0].vertex2[0] = 100
+                surface_out[0].vertex2[1] = 0
+                surface_out[0].vertex2[2] = -100
+
+                surface_out[0].vertex3[0] = 100
+                surface_out[0].vertex3[1] = 0
+                surface_out[0].vertex3[2] = 100
+
+                surface_out[0].normal[0] = hit_norm[0]
+                surface_out[0].normal[1] = hit_norm[2]
+                surface_out[0].normal[2] = -hit_norm[1]
+
+                surface_out[0].origin_offset = hit_height * 100
+
+                surface_out[0].type = 0x0000
+
+            else:
+                found_out[0] = 0
+            
+            return hit_height * 100
+
+        # Return closure
+        return find_ceil
 
     def process_updates(self, context):
         scene_obj_set = set(context.scene.objects.values())
@@ -322,13 +375,14 @@ class MarioTester(bpy.types.Operator):
         self.mario_obj = bpy.data.objects['mario_geo'] # Don't get the evaluated copy so we can set properties on it in the scene
         self.start_time = time.perf_counter()
         self.find_floor_handler = FindFloorHandlerType(self.create_find_floor_handler())
+        self.find_ceil_handler = FindFloorHandlerType(self.create_find_ceil_handler())
         
         if not _t :
             _t = threading.Thread(target=worker)
             _t.daemon = True
             _t.start()
         
-        libmario.init(self.find_floor_handler, None, None)
+        libmario.init(self.find_floor_handler, self.find_ceil_handler, None)
 
         mario_pos = Vec3f(self.mario_obj.location.x * 100, self.mario_obj.location.z * 100, -self.mario_obj.location.y * 100)
         mario_rot = Vec3f(math.degrees(self.mario_obj.rotation_euler[0]), math.degrees(self.mario_obj.rotation_euler[1]), math.degrees(self.mario_obj.rotation_euler[2]))
