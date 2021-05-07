@@ -73,6 +73,9 @@ libmario.getMarioVelocity.artypes = [Vec3f]
 libmario.getMarioRotation.restype = None
 libmario.getMarioRotation.artypes = [Vec3f]
 
+libmario.getMarioScale.restype = None
+libmario.getMarioScale.artypes = [Vec3f]
+
 libmario.getMarioTorsoRotation.restype = None
 libmario.getMarioTorsoRotation.artypes = [Vec3f]
 
@@ -529,10 +532,12 @@ class MarioTester(bpy.types.Operator):
                 pos = Vec3f()
                 vel = Vec3f()
                 rot = Vec3f()
+                scale = Vec3f()
                 torso_rot = Vec3f()
                 libmario.getMarioPosition(pos)
                 libmario.getMarioVelocity(vel)
                 libmario.getMarioRotation(rot)
+                libmario.getMarioScale(scale)
                 libmario.getMarioTorsoRotation(torso_rot)
                 anim_data = AnimData()
                 libmario.getMarioAnimData(byref(anim_data))
@@ -547,9 +552,9 @@ class MarioTester(bpy.types.Operator):
                 self.mario_obj.pose.bones['002-rotate'].rotation_euler[1] = math.radians(torso_rot[1])
                 self.mario_obj.pose.bones['002-rotate'].rotation_euler[2] = math.radians(torso_rot[2])
 
-                self.mario_obj.pose.bones[bone_names[0]].location[0] = float(anim_data.root_translation[0]) / 189.0
-                self.mario_obj.pose.bones[bone_names[0]].location[1] = float(anim_data.root_translation[1]) / 189.0
-                self.mario_obj.pose.bones[bone_names[0]].location[2] = float(anim_data.root_translation[2]) / 189.0
+                self.mario_obj.pose.bones[bone_names[0]].location[0] = float(anim_data.root_translation[0]) / 2.4 / 189.0
+                self.mario_obj.pose.bones[bone_names[0]].location[1] = float(anim_data.root_translation[1]) / 2.4 / 189.0
+                self.mario_obj.pose.bones[bone_names[0]].location[2] = float(anim_data.root_translation[2]) / 2.4 / 189.0
 
                 for bone_index, bone_name in enumerate(bone_names):
                     self.mario_obj.pose.bones[bone_name].rotation_euler[0] = math.radians(anim_data.bone_rotations[bone_index][0])
@@ -563,6 +568,10 @@ class MarioTester(bpy.types.Operator):
                 self.mario_obj.rotation_euler[0] = math.radians(rot[0])
                 self.mario_obj.rotation_euler[1] = math.radians(rot[2])
                 self.mario_obj.rotation_euler[2] = math.radians(rot[1])
+
+                self.mario_obj.scale[0] = scale[0]
+                self.mario_obj.scale[1] = scale[2]
+                self.mario_obj.scale[2] = scale[1]
     
         return {'PASS_THROUGH'}
 
