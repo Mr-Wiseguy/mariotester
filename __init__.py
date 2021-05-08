@@ -160,6 +160,20 @@ def worker():
 def get_surface_type(name):
     return surface_type_dict.get(name, 0x0000)
 
+def convert( aString ):
+    if aString.startswith("0x") or aString.startswith("0X"):
+        return int(aString,16)
+    elif aString.startswith("0"):
+        return int(aString,8)
+    else:
+        return int(aString)
+
+def get_surface_param(value):
+    try:
+        return convert(value.strip())
+    except:
+        return 0
+
 class MarioTester(bpy.types.Operator):
     """Mario Tester"""
     bl_idname = "view3d.mario_tester"
@@ -193,8 +207,9 @@ class MarioTester(bpy.types.Operator):
             hit_height = -11000.0 / 100.0
             hit_norm = mathutils.Vector((0.0, 0.0, 1.0))
             hit_surface = 0x0000
+            hit_surface_param = 0x0000
 
-            for bvh, (material_indices, mats) in self.floor_bvh_trees.items():
+            for bvh, (material_indices, mats, surface_params) in self.floor_bvh_trees.items():
                 cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(ray_origin, ray_dir)
                 if cur_pos and cur_dist < hit_dist:
                     hit_dist = cur_dist
@@ -203,6 +218,7 @@ class MarioTester(bpy.types.Operator):
                     hit_height = cur_pos.z
                     hit_norm = cur_norm
                     hit_surface = get_surface_type(mats[material_indices[index]])
+                    hit_surface_param = get_surface_param(surface_params[material_indices[index]])
 
             if hit_bvh:
                 found_out[0] = 1
@@ -225,6 +241,7 @@ class MarioTester(bpy.types.Operator):
                 surface_out[0].origin_offset = hit_height * 100
 
                 surface_out[0].type = hit_surface
+                surface_out[0].force = hit_surface_param
                 surface_out[0].flags = SURFACE_FLAG_DYNAMIC
 
             else:
@@ -247,8 +264,9 @@ class MarioTester(bpy.types.Operator):
             hit_height = 20000.0 / 100.0
             hit_norm = mathutils.Vector((0.0, 0.0, -1.0))
             hit_surface = 0x0000
+            hit_surface_param = 0x0000
 
-            for bvh, (material_indices, mats) in self.ceil_bvh_trees.items():
+            for bvh, (material_indices, mats, surface_params) in self.ceil_bvh_trees.items():
                 cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(ray_origin, ray_dir)
                 if cur_pos and cur_dist < hit_dist:
                     hit_dist = cur_dist
@@ -257,6 +275,7 @@ class MarioTester(bpy.types.Operator):
                     hit_height = cur_pos.z
                     hit_norm = cur_norm
                     hit_surface = get_surface_type(mats[material_indices[index]])
+                    hit_surface_param = get_surface_param(surface_params[material_indices[index]])
 
             if hit_bvh:
                 found_out[0] = 1
@@ -279,6 +298,7 @@ class MarioTester(bpy.types.Operator):
                 surface_out[0].origin_offset = hit_height * 100
 
                 surface_out[0].type = hit_surface
+                surface_out[0].force = hit_surface_param
                 surface_out[0].flags = SURFACE_FLAG_DYNAMIC
 
             else:
@@ -316,7 +336,7 @@ class MarioTester(bpy.types.Operator):
             # print('ray dir: ' + str(pos_x_ray_dir))
 
             # raycast positive ray direction against negative normal direction
-            for bvh, (material_indices, mats) in self.wall_neg_x_bvh_trees.items():
+            for bvh, (material_indices, mats, surface_params) in self.wall_neg_x_bvh_trees.items():
                 cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(pos_x_ray_origin, pos_x_ray_dir, real_radius * 2)
                 if cur_pos:
                     if num_hits < 4:
@@ -325,11 +345,12 @@ class MarioTester(bpy.types.Operator):
                         surfaces_out[num_hits].normal[2] = -cur_norm[1]
                         pos += mathutils.Vector((cur_dist * 100.0 - (radius * 2), 0, 0))
                         surfaces_out[num_hits].type = get_surface_type(mats[material_indices[index]])
+                        surfaces_out[num_hits].force = get_surface_param(surface_params[material_indices[index]])
                         surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
                     num_hits += 1
             
             # raycast negative ray direction against positive normal direction
-            for bvh, (material_indices, mats) in self.wall_pos_x_bvh_trees.items():
+            for bvh, (material_indices, mats, surface_params) in self.wall_pos_x_bvh_trees.items():
                 cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(neg_x_ray_origin, neg_x_ray_dir, real_radius * 2)
                 if cur_pos:
                     if num_hits < 4:
@@ -338,11 +359,12 @@ class MarioTester(bpy.types.Operator):
                         surfaces_out[num_hits].normal[2] = -cur_norm[1]
                         pos -= mathutils.Vector((cur_dist * 100.0 - (radius * 2), 0, 0))
                         surfaces_out[num_hits].type = get_surface_type(mats[material_indices[index]])
+                        surfaces_out[num_hits].force = get_surface_param(surface_params[material_indices[index]])
                         surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
                     num_hits += 1
                   
             # raycast positive ray direction against negative normal direction  
-            for bvh, (material_indices, mats) in self.wall_neg_z_bvh_trees.items():
+            for bvh, (material_indices, mats, surface_params) in self.wall_neg_z_bvh_trees.items():
                 cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(pos_z_ray_origin, pos_z_ray_dir, real_radius * 2)
                 if cur_pos:
                     if num_hits < 4:
@@ -351,11 +373,12 @@ class MarioTester(bpy.types.Operator):
                         surfaces_out[num_hits].normal[2] = -cur_norm[1]
                         pos += mathutils.Vector((0, 0, cur_dist * 100.0 - (radius * 2)))
                         surfaces_out[num_hits].type = get_surface_type(mats[material_indices[index]])
+                        surfaces_out[num_hits].force = get_surface_param(surface_params[material_indices[index]])
                         surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
                     num_hits += 1
             
             # raycast negative ray direction against positive normal direction
-            for bvh, (material_indices, mats) in self.wall_pos_z_bvh_trees.items():
+            for bvh, (material_indices, mats, surface_params) in self.wall_pos_z_bvh_trees.items():
                 cur_pos, cur_norm, index, cur_dist = bvh.ray_cast(neg_z_ray_origin, neg_z_ray_dir, real_radius * 2)
                 if cur_pos:
                     if num_hits < 4:
@@ -364,6 +387,7 @@ class MarioTester(bpy.types.Operator):
                         surfaces_out[num_hits].normal[2] = -cur_norm[1]
                         pos -= mathutils.Vector((0, 0, cur_dist * 100.0 - (radius * 2)))
                         surfaces_out[num_hits].type = get_surface_type(mats[material_indices[index]])
+                        surfaces_out[num_hits].force = get_surface_param(surface_params[material_indices[index]])
                         surfaces_out[num_hits].flags = SURFACE_FLAG_DYNAMIC
                     num_hits += 1
             
@@ -406,6 +430,7 @@ class MarioTester(bpy.types.Operator):
             cur_bmesh.normal_update()
 
             surface_types = [mat.collision_type_simple for mat in materials]
+            surface_params = [mat.collision_param for mat in materials]
             
             cur_floor_bmesh = cur_bmesh.copy()
             cur_ceil_bmesh = cur_bmesh.copy()
@@ -433,12 +458,12 @@ class MarioTester(bpy.types.Operator):
             cur_bmesh.free()
             cur_walls_pos_x_bmesh.normal_update()
             cur_walls_neg_x_bmesh.normal_update()
-            self.floor_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_floor_bmesh)] = ([face.material_index for face in cur_floor_bmesh.faces], surface_types)
-            self.ceil_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_ceil_bmesh)] = ([face.material_index for face in cur_ceil_bmesh.faces], surface_types)
-            self.wall_pos_x_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_pos_x_bmesh)] = ([face.material_index for face in cur_walls_pos_x_bmesh.faces], surface_types)
-            self.wall_neg_x_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_neg_x_bmesh)] = ([face.material_index for face in cur_walls_neg_x_bmesh.faces], surface_types)
-            self.wall_pos_z_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_pos_z_bmesh)] = ([face.material_index for face in cur_walls_pos_z_bmesh.faces], surface_types)
-            self.wall_neg_z_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_neg_z_bmesh)] = ([face.material_index for face in cur_walls_neg_z_bmesh.faces], surface_types)
+            self.floor_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_floor_bmesh)] = ([face.material_index for face in cur_floor_bmesh.faces], surface_types, surface_params)
+            self.ceil_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_ceil_bmesh)] = ([face.material_index for face in cur_ceil_bmesh.faces], surface_types, surface_params)
+            self.wall_pos_x_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_pos_x_bmesh)] = ([face.material_index for face in cur_walls_pos_x_bmesh.faces], surface_types, surface_params)
+            self.wall_neg_x_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_neg_x_bmesh)] = ([face.material_index for face in cur_walls_neg_x_bmesh.faces], surface_types, surface_params)
+            self.wall_pos_z_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_pos_z_bmesh)] = ([face.material_index for face in cur_walls_pos_z_bmesh.faces], surface_types, surface_params)
+            self.wall_neg_z_bvh_trees[mathutils.bvhtree.BVHTree.FromBMesh(cur_walls_neg_z_bmesh)] = ([face.material_index for face in cur_walls_neg_z_bmesh.faces], surface_types, surface_params)
 
             # print('pos x faces: ' + str(len(cur_walls_pos_x_bmesh.faces)))
             # print('neg x faces: ' + str(len(cur_walls_neg_x_bmesh.faces)))
