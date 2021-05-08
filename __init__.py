@@ -86,6 +86,9 @@ libmario.getMarioAnimFrame.artypes = []
 libmario.getMarioAnimIndex.restype = c_int32
 libmario.getMarioAnimIndex.artypes = []
 
+libmario.setMarioHealth.restype = None
+libmario.setMarioHealth.artypes = [c_int32]
+
 libmario.getMarioAnimData.restype = None
 libmario.getMarioAnimData.artypes = [POINTER(AnimData)]
 
@@ -533,6 +536,7 @@ class MarioTester(bpy.types.Operator):
                     self.stick_x = 0.0
                     self.stick_y = 0.0
                 
+                libmario.setMarioHealth(0x880)
                 libmario.step(self.buttons, c_float(self.stick_x), c_float(self.stick_y))
                 pos = Vec3f()
                 vel = Vec3f()
