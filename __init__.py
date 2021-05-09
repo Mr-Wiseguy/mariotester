@@ -58,9 +58,10 @@ class Surface(Structure):
 FindFloorHandlerType = CFUNCTYPE(c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_int32))
 FindCeilHandlerType = CFUNCTYPE(c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_int32))
 FindWallsHandlerType = CFUNCTYPE(c_int32, c_float, c_float, c_float, c_float, c_float, POINTER(Surface), POINTER(c_float))
+FindWaterLevelHandlerType = CFUNCTYPE(c_float, c_float, c_float)
 
 libmario.init.restype = None
-libmario.init.artypes = [FindFloorHandlerType, FindCeilHandlerType, FindWallsHandlerType]
+libmario.init.artypes = [FindFloorHandlerType, FindCeilHandlerType, FindWallsHandlerType, FindWaterLevelHandlerType]
 
 libmario.step.restype = None
 libmario.step.artypes = [c_int32, c_float, c_float]
@@ -188,12 +189,6 @@ class MarioTester(bpy.types.Operator):
 
     start_time = 0
     last_frame = 0
-
-    collision_data = []
-    # TODO split surfaces into walls/floors/ceilings
-    floor_bvh_trees = dict()
-
-    depsgraph = None
 
     # Creatures a closure that allows the function to access the MarioTester instance
     def create_find_floor_handler(self):
@@ -401,11 +396,43 @@ class MarioTester(bpy.types.Operator):
 
         # Return closure
         return find_wall_collisions
+    
+        
+    # Creatures a closure that allows the function to access the MarioTester instance
+    def create_water_level_handler(self):
+
+        def find_water_level(x, z):
+            y = -z / 100.0 # convert from sm64 space to blender space
+            x = x / 100.0
+            height = -11000 / 100.0
+            for (min_pos, max_pos, cur_height) in self.water_boxes:
+                if x > min_pos.x and x < max_pos.x and y > min_pos.y and y < max_pos.y and cur_height > height:
+                    height = cur_height
+            return height * 100.0
+        
+        return find_water_level
+    
+    def convert_water_boxes(self, water_box_objs):
+        water_boxes = []
+
+        for obj in water_box_objs:
+            if obj.parent:
+                pos = obj.parent.matrix_world @ obj.location
+                _, _, parent_scale = obj.parent.matrix_world.decompose()
+                size = parent_scale * obj.scale
+            else:
+                pos = obj.location
+                size = obj.scale
+            
+            water_boxes.append((pos.xy - size.xy, pos.xy + size.xy, (pos.z + size.z)))
+
+        return water_boxes
+
+
 
     def process_updates(self, context):
-        scene_obj_set = set(context.scene.objects.values())
-
-        collision_objs = [obj for obj in scene_obj_set if (obj.type == 'MESH' and obj.visible_get() and not obj.ignore_collision)]
+        collision_objs = [obj for obj in context.scene.objects if (obj.type == 'MESH' and obj.visible_get() and not obj.ignore_collision)]
+        water_box_objs = [obj for obj in context.scene.objects if (obj.type == 'EMPTY' and obj.sm64_obj_type == 'Water Box' and obj.waterBoxType == 'Water')]
 
         self.floor_bvh_trees = dict()
         self.ceil_bvh_trees = dict()
@@ -413,6 +440,7 @@ class MarioTester(bpy.types.Operator):
         self.wall_neg_x_bvh_trees = dict()
         self.wall_pos_z_bvh_trees = dict()
         self.wall_neg_z_bvh_trees = dict()
+        self.water_boxes = self.convert_water_boxes(water_box_objs)
 
         for obj in collision_objs:
             mesh = obj.data
@@ -489,13 +517,14 @@ class MarioTester(bpy.types.Operator):
         self.find_floor_handler = FindFloorHandlerType(self.create_find_floor_handler())
         self.find_ceil_handler = FindFloorHandlerType(self.create_find_ceil_handler())
         self.find_wall_collisions_handler = FindWallsHandlerType(self.create_find_wall_collisions_handler())
+        self.find_water_level_handler = FindWaterLevelHandlerType(self.create_water_level_handler())
         
         if not _t :
             _t = threading.Thread(target=worker)
             _t.daemon = True
             _t.start()
         
-        libmario.init(self.find_floor_handler, self.find_ceil_handler, self.find_wall_collisions_handler)
+        libmario.init(self.find_floor_handler, self.find_ceil_handler, self.find_wall_collisions_handler, self.find_water_level_handler)
 
         mario_pos = Vec3f(self.mario_obj.location.x * 100, self.mario_obj.location.z * 100, -self.mario_obj.location.y * 100)
         mario_rot = Vec3f(math.degrees(self.mario_obj.rotation_euler[0]), math.degrees(self.mario_obj.rotation_euler[1]), math.degrees(self.mario_obj.rotation_euler[2]))
