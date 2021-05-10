@@ -93,6 +93,9 @@ libmario.setMarioHealth.artypes = [c_int32]
 libmario.getMarioAnimData.restype = None
 libmario.getMarioAnimData.artypes = [POINTER(AnimData)]
 
+libmario.setCameraYaw.restype = None
+libmario.setCameraYaw.artypes = [c_float]
+
 CONT_A      = 0x8000
 CONT_B      = 0x4000
 CONT_G      = 0x2000
@@ -504,6 +507,12 @@ class MarioTester(bpy.types.Operator):
             cur_walls_neg_x_bmesh.free()
             cur_walls_pos_z_bmesh.free()
             cur_walls_neg_z_bmesh.free()
+        
+    def get_camera_yaw(self, context):
+        region = next(iter([area.spaces[0].region_3d for area in bpy.context.screen.areas if area.type == 'VIEW_3D']), None)
+        if region:
+            return math.degrees(region.view_rotation.to_euler()[2])
+        return 0
 
     def execute(self, context):
         global _t
@@ -535,6 +544,7 @@ class MarioTester(bpy.types.Operator):
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.033333, window=context.window)
         wm.modal_handler_add(self)
+        self.process_updates(context)
 
         return {'RUNNING_MODAL'}
 	
@@ -546,11 +556,11 @@ class MarioTester(bpy.types.Operator):
         global _t
         global events
         
-        if event.type in {'RIGHTMOUSE', 'ESC'}:
+        if event.type in {'ESC'}:
             self.cancel(context)
             return {'CANCELLED'}
 
-        self.process_updates(context)
+        # self.process_updates(context)
         cur_time = time.perf_counter()
 
 
@@ -586,10 +596,11 @@ class MarioTester(bpy.types.Operator):
                             print(event.code + ':' + str(event.state))
                     events.pop(0)
 
-                if (self.stick_x * self.stick_x + self.stick_y * self.stick_y) < (0.05 * 0.05):
+                if (self.stick_x * self.stick_x + self.stick_y * self.stick_y) < (0.05):
                     self.stick_x = 0.0
                     self.stick_y = 0.0
                 
+                libmario.setCameraYaw(c_float(self.get_camera_yaw(context)))
                 libmario.setMarioHealth(0x880)
                 libmario.step(self.buttons, c_float(self.stick_x), c_float(self.stick_y))
                 pos = Vec3f()
