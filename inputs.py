@@ -1299,7 +1299,7 @@ CURRENT = ()
 
 EVENT_MAP = (
     ('types', EVENT_TYPES),
-    ('type_codes', ((value, key) for key, value in EVENT_TYPES)),
+    ('type_codes', {value:key for (key, value) in EVENT_TYPES}),
     ('wincodes', WINCODES),
     ('specials', SPECIAL_DEVICES),
     ('xpad', XINPUT_MAPPING),
@@ -1468,6 +1468,7 @@ class BaseListener(object):  # pylint: disable=useless-object-inheritance
         self.codes = codes if codes else None
         self.app = None
         self.timeval = None
+        print('test: ' + str(EVENT_TYPES))
         self.type_codes = dict((
             (value, key)
             for key, value in EVENT_TYPES))

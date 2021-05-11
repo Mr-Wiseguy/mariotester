@@ -156,10 +156,44 @@ bone_names = [
     '000-offset.014',
 ]
 
-def worker():
-    global events
-    while True:
-        events.append(get_gamepad())
+import threading
+
+class InputThread(threading.Thread):
+    """Thread class with a stop() method. The thread itself has to check
+    regularly for the stopped() condition."""
+
+    def __init__(self):
+        super(InputThread, self).__init__(target=self.worker)
+        self._stop_event = threading.Event()
+
+    def stop(self):
+        self._stop_event.set()
+
+    def stopped(self):
+        return self._stop_event.is_set()
+
+    def worker(self):
+        global events
+        global devices
+        gamepad = None
+        while not self._stop_event.is_set():
+            if gamepad is None:
+                for cur_pad in devices.gamepads:
+                    try:
+                        cur_pad._GamePad__check_state()
+                        gamepad = cur_pad
+                        print('gamepad: ' + str(cur_pad))
+                        break
+                    except Exception as e:
+                        continue
+            if gamepad is None:
+                time.sleep(0.1)
+            else:
+                try:
+                    events.append(gamepad.read())
+                except Exception as e:
+                    gamepad = None
+                    time.sleep(0.1)
 
 def get_surface_type(name):
     return surface_type_dict.get(name, 0x0000)
@@ -517,6 +551,11 @@ class MarioTester(bpy.types.Operator):
     def execute(self, context):
         global _t
         global events
+        global devices
+
+        devices = DeviceManager()
+        # print(devices.codes['types'])
+        print(len(devices.gamepads))
 
         if not hasattr(bpy.types.Object, 'ignore_collision'):
             raise Exception('Fast64 Not Installed!')
@@ -528,10 +567,13 @@ class MarioTester(bpy.types.Operator):
         self.find_wall_collisions_handler = FindWallsHandlerType(self.create_find_wall_collisions_handler())
         self.find_water_level_handler = FindWaterLevelHandlerType(self.create_water_level_handler())
         
-        if not _t :
-            _t = threading.Thread(target=worker)
-            _t.daemon = True
-            _t.start()
+        if _t:
+            _t.stop()
+            _t = None
+        
+        _t = InputThread()
+        _t.daemon = True
+        _t.start()
         
         libmario.init(self.find_floor_handler, self.find_ceil_handler, self.find_wall_collisions_handler, self.find_water_level_handler)
 
@@ -558,6 +600,8 @@ class MarioTester(bpy.types.Operator):
         
         if event.type in {'ESC'}:
             self.cancel(context)
+            _t.stop()
+            _t = None
             return {'CANCELLED'}
 
         # self.process_updates(context)
