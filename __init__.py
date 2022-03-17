@@ -253,7 +253,11 @@ class MarioTester(bpy.types.Operator):
                     hit_surface_param = get_surface_param(surface_params[material_indices[index]])
 
             if hit_bvh:
+                n_x = hit_norm[0]
+                n_y = hit_norm[2]
+                n_z = -hit_norm[1]
                 found_out[0] = 1
+
                 surface_out[0].vertex1[0] = -100
                 surface_out[0].vertex1[1] = 0
                 surface_out[0].vertex1[2] = -100
@@ -266,11 +270,11 @@ class MarioTester(bpy.types.Operator):
                 surface_out[0].vertex3[1] = 0
                 surface_out[0].vertex3[2] = 100
 
-                surface_out[0].normal[0] = hit_norm[0]
-                surface_out[0].normal[1] = hit_norm[2]
-                surface_out[0].normal[2] = -hit_norm[1]
+                surface_out[0].normal[0] = n_x
+                surface_out[0].normal[1] = n_y
+                surface_out[0].normal[2] = n_z
 
-                surface_out[0].origin_offset = hit_height * 100
+                surface_out[0].origin_offset = -(n_x * x + n_y * y + n_z * z)
 
                 surface_out[0].type = hit_surface
                 surface_out[0].force = hit_surface_param
